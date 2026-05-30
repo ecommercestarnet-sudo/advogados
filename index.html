@@ -168,6 +168,7 @@
       }
       .hero-bg {
         background-image: url('Advogado-Mobile.webp');
+        background-size: contain;
         background-position: center bottom;
       }
     }
@@ -2617,7 +2618,7 @@
   counterEls.forEach(el => counterObserver.observe(el));
 
   /* =====================
-     PARALLAX HERO
+     PARALLAX HERO (desktop only)
   ===================== */
   const heroBg = document.querySelector('.hero-bg');
   const heroPattern = document.querySelector('.hero-pattern');
@@ -2626,9 +2627,12 @@
   window.addEventListener('scroll', () => {
     if (!ticking) {
       requestAnimationFrame(() => {
-        const scrolled = window.scrollY;
-        if (heroBg) heroBg.style.transform = `translateY(${scrolled * 0.35}px)`;
-        if (heroPattern) heroPattern.style.transform = `translateY(${scrolled * 0.2}px)`;
+        /* Desativado no mobile: parallax causa travamento na rolagem */
+        if (window.innerWidth > 768) {
+          const scrolled = window.scrollY;
+          if (heroBg) heroBg.style.transform = `translateY(${scrolled * 0.35}px)`;
+          if (heroPattern) heroPattern.style.transform = `translateY(${scrolled * 0.2}px)`;
+        }
         ticking = false;
       });
       ticking = true;
