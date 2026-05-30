@@ -165,12 +165,13 @@
       .hero {
         min-height: 165vh;
         align-items: flex-start;
-        background-color: #362c1d;
+        background-color: #0a0603; /* fallback escuro quase preto */
       }
       .hero-bg {
         background-image: url('Advogado-Mobile.webp');
         background-size: contain;
         background-position: center bottom;
+        background-color: transparent;
       }
     }
 
@@ -191,17 +192,18 @@
         );
     }
 
-    /* Mobile: overlay com tom marrom quente — fundo #362c1d fundindo na imagem */
+    /* Mobile: overlay é o próprio fundo — sólido escuro quente no topo,
+       dissolve suavemente na imagem sem criar linha de separação */
     @media (max-width: 768px) {
       .hero-overlay {
-        background:
-          linear-gradient(to bottom,
-            rgba(54,44,29,0.95) 0%,
-            rgba(54,44,29,0.85) 20%,
-            rgba(54,44,29,0.55) 38%,
-            rgba(54,44,29,0.15) 52%,
-            rgba(54,44,29,0.0) 62%
-          );
+        background: linear-gradient(to bottom,
+          rgba(18,11,4,1.00)  0%,
+          rgba(18,11,4,1.00) 28%,
+          rgba(18,11,4,0.80) 40%,
+          rgba(18,11,4,0.42) 51%,
+          rgba(18,11,4,0.10) 60%,
+          rgba(18,11,4,0.00) 68%
+        );
       }
     }
 
