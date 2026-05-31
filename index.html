@@ -3566,6 +3566,86 @@
     loadingDesc.textContent = desc;
   }
 
+  async function analisarComGemini(respostas) {
+    const { nome, whatsapp, tempo_servico, motivo_saida, pendencias, trabalho_irregular, relato } = respostas;
+    
+    // Default fallback values
+    let score = 5;
+    if (pendencias.length > 0) score += 2;
+    if (trabalho_irregular.includes("irregular")) score += 2;
+    if (motivo_saida.includes("sem justa causa")) score += 1;
+    if (score > 10) score = 10;
+
+    const pendenciasTexto = pendencias.length > 0 ? pendencias.join(', ') : 'Nenhuma pendência informada';
+
+    let diagnostico = `Análise Preliminar do Caso:\nCom base nas informações fornecidas, o seu caso tem um score estimado de viabilidade de ${score}/10.\n\nDireitos potencialmente afetados: ${pendenciasTexto}.\n\nSituação relatada: ${motivo_saida} com tempo de serviço de ${tempo_servico}.`;
+
+    let whatsappMsg = `Olá! Gostaria de um atendimento com base na triagem que realizei no site.\n\n` +
+                      `*Meus Dados*:\n` +
+                      `- Nome: ${nome}\n` +
+                      `- WhatsApp: ${whatsapp}\n\n` +
+                      `*Resumo do Caso*:\n` +
+                      `- Tempo de Serviço: ${tempo_servico}\n` +
+                      `- Situação Atual: ${motivo_saida}\n` +
+                      `- Trabalho Irregular: ${trabalho_irregular}\n` +
+                      `- Direitos Afetados: ${pendenciasTexto}\n` +
+                      `- Relato: ${relato}\n\n` +
+                      `*Score Estimado*: ${score}/10`;
+
+    if (!GEMINI_API_KEY) {
+      return { score, diagnostico, whatsappMsg };
+    }
+
+    try {
+      updateLoadingText("Qualificando com Gemini AI...", "Avaliando detalhes sob a CLT.");
+      const prompt = `Você é um assistente jurídico inteligente especializado em Direito do Trabalho (CLT) do Brasil.
+Analise os seguintes dados de triagem trabalhista:
+Nome do Trabalhador: ${nome}
+WhatsApp: ${whatsapp}
+Tempo de serviço: ${tempo_servico}
+Situação na empresa: ${motivo_saida}
+Direitos/Pendências identificados pelo trabalhador: ${pendenciasTexto}
+Registro de carteira/irregularidade: ${trabalho_irregular}
+Relato detalhado: ${relato}
+
+Com base nas informações, retorne um objeto JSON contendo exatamente:
+1. "score": Um número inteiro de 0 a 10 representando a viabilidade jurídica do caso (onde 0-4 é viabilidade baixa, 5-7 média, 8-10 alta).
+2. "diagnostico": Um diagnóstico técnico direto e claro para o trabalhador ler na tela do site (máximo 3 parágrafos, sem jargões jurídicos complexos, com tom empático). Diga quais direitos ele provavelmente possui com base na CLT.
+3. "mensagem_whatsapp": Uma mensagem de resumo organizada, utilizando negritos em títulos, pronta para enviar no WhatsApp do advogado.
+
+Retorne APENAS o JSON puro, sem blocos de código Markdown ou qualquer texto explicativo. Exemplo de retorno:
+{
+  "score": 8,
+  "diagnostico": "Com base no seu relato...",
+  "mensagem_whatsapp": "Olá..."
+}`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawText = data.candidates[0].content.parts[0].text;
+        const parsed = JSON.parse(rawText.trim());
+        return {
+          score: parsed.score !== undefined ? parsed.score : score,
+          diagnostico: parsed.diagnostico || diagnostico,
+          whatsappMsg: parsed.mensagem_whatsapp || whatsappMsg
+        };
+      }
+    } catch (e) {
+      console.error("Erro ao chamar API do Gemini, usando fallback:", e);
+    }
+
+    return { score, diagnostico, whatsappMsg };
+  }
+
   tForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!validateStep(6)) return;
@@ -3587,88 +3667,21 @@
     const relato = document.getElementById('lead-relato').value.trim();
 
     try {
-      // 1. AI / Gemini Evaluation Phase (Done first to calculate score and analysis before database inserts)
       updateLoadingText("Analisando seu caso...", "Nossa inteligência artificial está avaliando seus direitos.");
 
-      let score = 5;
-      let analiseIa = "";
-      let whatsappMsg = "";
+      const result = await analisarComGemini({
+        nome, whatsapp, tempo_servico: tempoServico, motivo_saida: motivoSaida,
+        pendencias: pendenciasArray, trabalho_irregular: trabalhoIrregular, relato
+      });
 
-      // Internal rule-based fallback calculation
-      let calculatedScore = 5;
-      if (pendenciasArray.length > 0) calculatedScore += 2;
-      if (trabalhoIrregular.includes("irregular")) calculatedScore += 2;
-      if (motivoSaida.includes("sem justa causa")) calculatedScore += 1;
-      if (calculatedScore > 10) calculatedScore = 10;
-      score = calculatedScore;
+      const { score, diagnostico: analiseIa, whatsappMsg } = result;
 
-      const pendenciasTexto = pendenciasArray.length > 0 ? pendenciasArray.join(', ') : 'Nenhuma pendência informada';
-
-      analiseIa = `Análise Preliminar do Caso:\nCom base nas informações fornecidas, o seu caso tem um score estimado de viabilidade de ${score}/10.\n\nDireitos potencialmente afetados: ${pendenciasTexto}.\n\nSituação relatada: ${motivoSaida} com tempo de serviço de ${tempoServico}.`;
-
-      whatsappMsg = `Olá! Gostaria de um atendimento com base na triagem que realizei no site.\n\n` +
-                    `*Meus Dados*:\n` +
-                    `- Nome: ${nome}\n` +
-                    `- WhatsApp: ${whatsapp}\n\n` +
-                    `*Resumo do Caso*:\n` +
-                    `- Tempo de Serviço: ${tempoServico}\n` +
-                    `- Situação Atual: ${motivoSaida}\n` +
-                    `- Trabalho Irregular: ${trabalhoIrregular}\n` +
-                    `- Direitos Afetados: ${pendenciasTexto}\n` +
-                    `- Relato: ${relato}\n\n` +
-                    `*Score Estimado*: ${score}/10`;
-
-      // Call Gemini API if key is provided
-      if (GEMINI_API_KEY) {
-        try {
-          updateLoadingText("Qualificando com Gemini AI...", "Avaliando detalhes sob a CLT.");
-          const prompt = `Você é um assistente jurídico especializado em CLT.
-Analise essa triagem trabalhista:
-Nome: ${nome}
-WhatsApp: ${whatsapp}
-Tempo de serviço: ${tempoServico}
-Situação na empresa: ${motivoSaida}
-Direitos assinalados: ${pendenciasTexto}
-Registro/Contrato irregular: ${trabalhoIrregular}
-Relato do caso: ${relato}
-
-Com base nisso, retorne uma resposta no formato JSON com:
-{
-  "score": 8,
-  "diagnostico": "Texto curto para exibir na tela do site explicando a viabilidade e quais direitos se aplicam.",
-  "mensagem_whatsapp": "Mensagem formatada para enviar no WhatsApp do advogado resumindo o caso."
-}
-Retorne exclusivamente o JSON puro:`;
-
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { responseMimeType: "application/json" }
-            })
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            const rawText = data.candidates[0].content.parts[0].text;
-            const parsed = JSON.parse(rawText);
-            if (parsed.score !== undefined) score = parsed.score;
-            if (parsed.diagnostico) analiseIa = parsed.diagnostico;
-            if (parsed.mensagem_whatsapp) whatsappMsg = parsed.mensagem_whatsapp;
-          }
-        } catch (geminiErr) {
-          console.error("Falha ao se conectar com a API do Gemini:", geminiErr);
-        }
-      }
-
-      // Generate local UUID to reference lead_id without SELECT policy permission requirements
       function generateUUID() {
         if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
           return crypto.randomUUID();
         }
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-          var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
           return v.toString(16);
         });
       }
@@ -3676,58 +3689,27 @@ Retorne exclusivamente o JSON puro:`;
       leadId = generateUUID();
       const statusQualificacao = score >= 7 ? 'qualificado' : (score >= 5 ? 'pendente' : 'frio');
 
-      // 2. Create Lead and Triagem in Supabase if SDK loaded successfully
       if (_supabase) {
         try {
           updateLoadingText("Salvando informações...", "Cadastrando o seu contato de forma segura.");
-          const { error: leadError } = await _supabase
-            .from('leads')
-            .insert([{
-              id: leadId,
-              nome: nome,
-              whatsapp: whatsapp,
-              status_qualificacao: statusQualificacao,
-              score: score
-            }]);
-
-          if (leadError) throw leadError;
-
-          // 3. Create Triagem in Supabase (with respostas_json, analise_ia already populated)
-          updateLoadingText("Enviando triagem...", "Registrando histórico das respostas.");
-          const respostasJson = {
-            tempo_servico: tempoServico,
-            motivo_saida: motivoSaida,
-            pendencias: pendenciasArray,
-            trabalho_irregular: trabalhoIrregular,
-            relato: relato
-          };
-
-          const { error: triagemError } = await _supabase
-            .from('triagens')
-            .insert([{
-              lead_id: leadId,
-              respostas_json: respostasJson,
-              analise_ia: analiseIa
-            }]);
-
-          if (triagemError) throw triagemError;
+          await _supabase.from('leads').insert([{ id: leadId, nome, whatsapp, status_qualificacao: statusQualificacao, score }]);
+          
+          await _supabase.from('triagens').insert([{
+            lead_id: leadId,
+            respostas_json: { tempo_servico: tempoServico, motivo_saida: motivoSaida, pendencias: pendenciasArray, trabalho_irregular: trabalhoIrregular, relato },
+            analise_ia: analiseIa
+          }]);
         } catch (dbErr) {
-          console.error("Erro na gravação de dados no Supabase, prosseguindo localmente:", dbErr);
-          // Permite que o usuário continue o fluxo mesmo com falha no banco
+          console.error("Erro na gravação de dados:", dbErr);
         }
-      } else {
-        console.warn("Gravação no banco pulada: Supabase não inicializado.");
       }
 
-      // 4. Show Results UI
       tLoading.classList.remove('active');
       tResult.classList.add('active');
 
       document.getElementById('result-score-val').textContent = score + '/10';
       document.getElementById('result-box-desc').innerHTML = analiseIa.replace(/\n/g, '<br>');
-      
-      const encodedMsg = encodeURIComponent(whatsappMsg);
-      document.getElementById('result-whatsapp-btn').href = `https://wa.me/${WHATSAPP_PHONE}?text=${encodedMsg}`;
+      document.getElementById('result-whatsapp-btn').href = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(whatsappMsg)}`;
 
     } catch (err) {
       console.error("Erro geral na triagem:", err);
@@ -3736,6 +3718,3 @@ Retorne exclusivamente o JSON puro:`;
       tForm.style.display = 'block';
     }
   });
-</script>
-</body>
-</html>
