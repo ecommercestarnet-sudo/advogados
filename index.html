@@ -3539,24 +3539,6 @@
       }
     } else if (step === 6) {
       const relatoInput = document.getElementById('lead-relato');
-      const errRelato = document.getElementById('err-relato');
-      if (relatoInput.value.trim().length < 10) {
-        errRelato.style.display = 'block';
-        relatoInput.style.borderColor = '#ff6b6b';
-        isValid = false;
-      } else {
-        errRelato.style.display = 'none';
-        relatoInput.style.borderColor = '';
-      }
-    }
-    return isValid;
-  }
-
-  function updateLoadingText(title, desc) {
-    loadingTitle.textContent = title;
-    loadingDesc.textContent = desc;
-  }
-
   tForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!validateStep(6)) return;
@@ -3578,33 +3560,7 @@
     const relato = document.getElementById('lead-relato').value.trim();
 
     try {
-      // 1. Create Lead in Supabase
-      updateLoadingText("Salvando informações...", "Cadastrando o seu contato de forma segura.");
-      const { data: leadData, error: leadError } = await _supabase
-        .from('leads')
-        .insert([{ nome, whatsapp, status_qualificacao: 'pendente' }])
-        .select();
-
-      if (leadError) throw leadError;
-      leadId = leadData[0].id;
-
-      // 2. Create Triagem in Supabase
-      updateLoadingText("Enviando triagem...", "Registrando histórico das respostas.");
-      const respostasJson = {
-        tempo_servico: tempoServico,
-        motivo_saida: motivoSaida,
-        pendencias: pendenciasArray,
-        trabalho_irregular: trabalhoIrregular,
-        relato: relato
-      };
-
-      const { error: triagemError } = await _supabase
-        .from('triagens')
-        .insert([{ lead_id: leadId, respostas_json: respostasJson }]);
-
-      if (triagemError) throw triagemError;
-
-      // 3. AI / Gemini Evaluation Phase
+      // 1. AI / Gemini Evaluation Phase (Done first to calculate score and analysis before database inserts)
       updateLoadingText("Analisando seu caso...", "Nossa inteligência artificial está avaliando seus direitos.");
 
       let score = 5;
@@ -3679,20 +3635,55 @@ Retorne exclusivamente o JSON puro:`;
         }
       }
 
-      // 4. Update Supabase with results
-      const statusQualificacao = score >= 7 ? 'qualificado' : (score >= 5 ? 'pendente' : 'frio');
+      // Generate local UUID to reference lead_id without SELECT policy permission requirements
+      function generateUUID() {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      }
       
-      await _supabase
+      leadId = generateUUID();
+      const statusQualificacao = score >= 7 ? 'qualificado' : (score >= 5 ? 'pendente' : 'frio');
+
+      // 2. Create Lead in Supabase (with score, status_qualificacao already populated)
+      updateLoadingText("Salvando informações...", "Cadastrando o seu contato de forma segura.");
+      const { error: leadError } = await _supabase
         .from('leads')
-        .update({ score: score, status_qualificacao: statusQualificacao })
-        .eq('id', leadId);
+        .insert([{
+          id: leadId,
+          nome: nome,
+          whatsapp: whatsapp,
+          status_qualificacao: statusQualificacao,
+          score: score
+        }]);
 
-      await _supabase
+      if (leadError) throw leadError;
+
+      // 3. Create Triagem in Supabase (with respostas_json, analise_ia already populated)
+      updateLoadingText("Enviando triagem...", "Registrando histórico das respostas.");
+      const respostasJson = {
+        tempo_servico: tempoServico,
+        motivo_saida: motivoSaida,
+        pendencias: pendenciasArray,
+        trabalho_irregular: trabalhoIrregular,
+        relato: relato
+      };
+
+      const { error: triagemError } = await _supabase
         .from('triagens')
-        .update({ analise_ia: analiseIa })
-        .eq('lead_id', leadId);
+        .insert([{
+          lead_id: leadId,
+          respostas_json: respostasJson,
+          analise_ia: analiseIa
+        }]);
 
-      // 5. Show Results UI
+      if (triagemError) throw triagemError;
+
+      // 4. Show Results UI
       tLoading.classList.remove('active');
       tResult.classList.add('active');
 
