@@ -3548,6 +3548,24 @@
       }
     } else if (step === 6) {
       const relatoInput = document.getElementById('lead-relato');
+      const errRelato = document.getElementById('err-relato');
+      if (relatoInput.value.trim().length < 10) {
+        errRelato.style.display = 'block';
+        relatoInput.style.borderColor = '#ff6b6b';
+        isValid = false;
+      } else {
+        errRelato.style.display = 'none';
+        relatoInput.style.borderColor = '';
+      }
+    }
+    return isValid;
+  }
+
+  function updateLoadingText(title, desc) {
+    loadingTitle.textContent = title;
+    loadingDesc.textContent = desc;
+  }
+
   tForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!validateStep(6)) return;
