@@ -740,12 +740,17 @@
     // Autosafe update status in Supabase
     window.updateStatus = async function(leadId, newStatus) {
       try {
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
           .from('leads')
           .update({ status_qualificacao: newStatus })
-          .eq('id', leadId);
+          .eq('id', leadId)
+          .select();
 
         if (error) throw error;
+
+        if (!data || data.length === 0) {
+          throw new Error("Erro de RLS: Certifique-se de habilitar políticas de UPDATE para usuários autenticados no Supabase.");
+        }
 
         // Keep local state synchronized
         const lead = allLeads.find(l => l.id === leadId);
@@ -756,7 +761,7 @@
         showToast("Status atualizado com sucesso!", "success");
       } catch (err) {
         console.error("Erro ao atualizar status:", err);
-        showToast("Falha ao salvar status no banco de dados.", "error");
+        showToast(err.message || "Falha ao salvar status no banco de dados.", "error");
       }
     }
 
@@ -767,12 +772,17 @@
       }
 
       try {
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
           .from('leads')
           .delete()
-          .eq('id', leadId);
+          .eq('id', leadId)
+          .select();
 
         if (error) throw error;
+
+        if (!data || data.length === 0) {
+          throw new Error("Erro de RLS: Certifique-se de habilitar políticas de DELETE para usuários autenticados no Supabase.");
+        }
 
         // Remove from local memory list and update view
         allLeads = allLeads.filter(l => l.id !== leadId);
@@ -782,7 +792,7 @@
         showToast(`Lead "${name}" removido com sucesso.`, "success");
       } catch (err) {
         console.error("Erro ao deletar lead:", err);
-        showToast("Erro ao excluir o lead. Tente novamente.", "error");
+        showToast(err.message || "Erro ao excluir o lead. Tente novamente.", "error");
       }
     }
 
