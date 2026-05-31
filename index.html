@@ -3405,8 +3405,17 @@
   const GEMINI_API_KEY = ''; // Insira sua API Key do Gemini aqui se desejar
   const WHATSAPP_PHONE = '5585999999999'; // Telefone do escritório para redirecionamento
 
-  // Initialize Supabase client
-  const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // Initialize Supabase client safely (resilient to connection errors or script blockers)
+  let _supabase = null;
+  if (typeof supabase !== 'undefined') {
+    try {
+      _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch (e) {
+      console.error("Erro ao inicializar Supabase Client:", e);
+    }
+  } else {
+    console.warn("Supabase SDK nao foi carregado. O modal continuara funcionando de forma local/offline.");
+  }
 
   const tModal = document.getElementById('triagem-modal');
   const tForm = document.getElementById('triagem-form');
@@ -3649,39 +3658,48 @@ Retorne exclusivamente o JSON puro:`;
       leadId = generateUUID();
       const statusQualificacao = score >= 7 ? 'qualificado' : (score >= 5 ? 'pendente' : 'frio');
 
-      // 2. Create Lead in Supabase (with score, status_qualificacao already populated)
-      updateLoadingText("Salvando informações...", "Cadastrando o seu contato de forma segura.");
-      const { error: leadError } = await _supabase
-        .from('leads')
-        .insert([{
-          id: leadId,
-          nome: nome,
-          whatsapp: whatsapp,
-          status_qualificacao: statusQualificacao,
-          score: score
-        }]);
+      // 2. Create Lead and Triagem in Supabase if SDK loaded successfully
+      if (_supabase) {
+        try {
+          updateLoadingText("Salvando informações...", "Cadastrando o seu contato de forma segura.");
+          const { error: leadError } = await _supabase
+            .from('leads')
+            .insert([{
+              id: leadId,
+              nome: nome,
+              whatsapp: whatsapp,
+              status_qualificacao: statusQualificacao,
+              score: score
+            }]);
 
-      if (leadError) throw leadError;
+          if (leadError) throw leadError;
 
-      // 3. Create Triagem in Supabase (with respostas_json, analise_ia already populated)
-      updateLoadingText("Enviando triagem...", "Registrando histórico das respostas.");
-      const respostasJson = {
-        tempo_servico: tempoServico,
-        motivo_saida: motivoSaida,
-        pendencias: pendenciasArray,
-        trabalho_irregular: trabalhoIrregular,
-        relato: relato
-      };
+          // 3. Create Triagem in Supabase (with respostas_json, analise_ia already populated)
+          updateLoadingText("Enviando triagem...", "Registrando histórico das respostas.");
+          const respostasJson = {
+            tempo_servico: tempoServico,
+            motivo_saida: motivoSaida,
+            pendencias: pendenciasArray,
+            trabalho_irregular: trabalhoIrregular,
+            relato: relato
+          };
 
-      const { error: triagemError } = await _supabase
-        .from('triagens')
-        .insert([{
-          lead_id: leadId,
-          respostas_json: respostasJson,
-          analise_ia: analiseIa
-        }]);
+          const { error: triagemError } = await _supabase
+            .from('triagens')
+            .insert([{
+              lead_id: leadId,
+              respostas_json: respostasJson,
+              analise_ia: analiseIa
+            }]);
 
-      if (triagemError) throw triagemError;
+          if (triagemError) throw triagemError;
+        } catch (dbErr) {
+          console.error("Erro na gravação de dados no Supabase, prosseguindo localmente:", dbErr);
+          // Permite que o usuário continue o fluxo mesmo com falha no banco
+        }
+      } else {
+        console.warn("Gravação no banco pulada: Supabase não inicializado.");
+      }
 
       // 4. Show Results UI
       tLoading.classList.remove('active');
