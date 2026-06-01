@@ -3063,12 +3063,13 @@
               <span class="error-msg" id="err-whatsapp">Por favor, insira um número de WhatsApp válido.</span>
             </div>
             
-            <div class="consent-group" style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 20px;">
+            <div class="consent-group" style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 5px;">
               <input type="checkbox" id="lgpd-consent" required style="width: 14px; height: 14px; margin-top: 3px; cursor: pointer;">
               <label for="lgpd-consent" style="font-size: 0.75rem; color: #888; line-height: 1.4; font-weight: normal; cursor: pointer; text-transform: none; margin: 0; padding: 0; flex: 1;">
-                Aceito a <a href="#" style="color: inherit; text-decoration: underline;">Política de Privacidade</a>, termos de uso e o uso de cookies (Lei da Internet/LGPD).
+                Aceito a <a href="#" onclick="openPrivacyModal(event)" style="color: inherit; text-decoration: underline;">Política de Privacidade</a>, termos de uso e o uso de cookies (Lei da Internet/LGPD).
               </label>
             </div>
+            <span class="error-msg" id="err-lgpd" style="margin-top: 0px; margin-bottom: 15px; display: none;">Você precisa aceitar a Política de Privacidade para continuar.</span>
             
             <div class="btn-group">
               <button type="button" class="btn-next">Continuar</button>
@@ -3230,6 +3231,27 @@
         
       </div>
       
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PRIVACY MODAL ==================== -->
+<div id="privacy-modal" class="t-modal" aria-hidden="true" role="dialog" style="z-index: 10000;">
+  <div class="t-modal-overlay" onclick="closePrivacyModal()"></div>
+  <div class="t-modal-container" style="max-width: 600px;">
+    <button class="t-modal-close" onclick="closePrivacyModal()" aria-label="Fechar modal">&times;</button>
+    <div class="t-modal-content" style="padding: 30px; text-align: left;">
+      <h2 style="font-size: 1.5rem; margin-bottom: 15px; color: var(--gold-light);">Política de Privacidade e Termos de Uso</h2>
+      <div style="font-size: 0.9rem; color: #555; line-height: 1.6; max-height: 60vh; overflow-y: auto; padding-right: 10px;">
+        <p><strong>1. Coleta de Dados</strong><br>Coletamos os dados fornecidos neste formulário (nome, telefone e relato do caso) com o único propósito de realizar a triagem jurídica e entrar em contato com você para oferecer nossos serviços de advocacia.</p>
+        <p style="margin-top:10px;"><strong>2. Uso de Informações</strong><br>As informações são tratadas com sigilo e utilizadas exclusivamente pela nossa equipe de advogados para avaliar a viabilidade da sua demanda trabalhista.</p>
+        <p style="margin-top:10px;"><strong>3. Compartilhamento</strong><br>Não vendemos, alugamos ou compartilhamos seus dados pessoais com terceiros não autorizados.</p>
+        <p style="margin-top:10px;"><strong>4. Cookies</strong><br>Utilizamos cookies essenciais para garantir o funcionamento do site e melhorar a sua experiência de navegação.</p>
+        <p style="margin-top:10px;"><strong>5. Direitos do Titular (LGPD)</strong><br>Você pode solicitar a exclusão ou alteração de seus dados a qualquer momento entrando em contato através de nossos canais oficiais.</p>
+      </div>
+      <div style="margin-top: 20px; text-align: right;">
+        <button type="button" class="btn-next" onclick="closePrivacyModal()" style="padding: 10px 20px; font-size: 0.9rem;">Entendi</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3504,6 +3526,24 @@
     e.target.value = formatted;
   });
 
+  // Privacy Modal
+  function openPrivacyModal(e) {
+    if (e) e.preventDefault();
+    const modal = document.getElementById('privacy-modal');
+    if (modal) {
+      modal.classList.add('active');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  function closePrivacyModal() {
+    const modal = document.getElementById('privacy-modal');
+    if (modal) {
+      modal.classList.remove('active');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
   // Step Switcher
   function goToStep(step) {
     document.querySelectorAll('.triagem-step').forEach(el => el.classList.remove('active'));
@@ -3538,6 +3578,8 @@
       const whatsappInput = document.getElementById('lead-whatsapp');
       const errNome = document.getElementById('err-nome');
       const errWhatsapp = document.getElementById('err-whatsapp');
+      const lgpdCheckbox = document.getElementById('lgpd-consent');
+      const errLgpd = document.getElementById('err-lgpd');
 
       if (nomeInput.value.trim().length < 3) {
         errNome.style.display = 'block';
@@ -3556,6 +3598,13 @@
       } else {
         errWhatsapp.style.display = 'none';
         whatsappInput.style.borderColor = '';
+      }
+
+      if (!lgpdCheckbox.checked) {
+        if (errLgpd) errLgpd.style.display = 'block';
+        isValid = false;
+      } else {
+        if (errLgpd) errLgpd.style.display = 'none';
       }
     } else if (step === 6) {
       const relatoInput = document.getElementById('lead-relato');
